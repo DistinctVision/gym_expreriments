@@ -4,7 +4,7 @@ import time
 
 import numpy as np
 import torch
-import gym
+import gymnasium as gym
 
 from trainer import Trainer, EpisodeDataRecorder
 from data import SharedDataCollector
