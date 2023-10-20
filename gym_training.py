@@ -2,17 +2,21 @@ from pathlib import Path
 import yaml
 import time
 
+from collections import deque
+
 import numpy as np
 import torch
 import gymnasium as gym
 
+import plotly.express as ex
+
 from trainer import Trainer, EpisodeDataRecorder
-from data import SharedDataCollector
+from data import ReplayBuffer
 
 
 cfg = yaml.safe_load(open(Path(__file__).parent / 'cfg.yaml', 'r'))
-data_collector = SharedDataCollector(cfg)
-trainer = Trainer(cfg, data_collector)
+replay_buffer = ReplayBuffer()
+trainer = Trainer(cfg, replay_buffer)
 episode_data_recorder = EpisodeDataRecorder(trainer)
 
 
@@ -25,11 +29,10 @@ def preprocess(world_state: np.ndarray) -> torch.Tensor:
     return (world_state - mean_world_state) / std_world_state
 
 
+last_rewards = deque(maxlen=100)
+
 env = gym.make("CartPole-v1")
 env.reset()
-
-sum_ep_reward = 0.0
-ep_counter = 0
 
 while True:
     world_state_tensor, state = env.reset()
@@ -41,37 +44,26 @@ while True:
     
     data_is_updated = False
     
-    action_idx, data_is_updated = \
-        episode_data_recorder.do_next_step(world_state_tensor, 0.0, False)
-    
     while not done:
+        action_idx = episode_data_recorder.get_action(world_state_tensor)
         new_world_state_tensor, reward, terminated, truncated, state = env.step(action_idx)
         new_world_state_tensor = preprocess(new_world_state_tensor)
         done = terminated or truncated
     
-        action_idx, data_is_updated_ = episode_data_recorder.do_next_step(world_state_tensor,
-                                                                          reward, not done)
+        data_is_updated_ = episode_data_recorder.record(world_state_tensor, action_idx, reward, done)
         data_is_updated = data_is_updated or data_is_updated_
         
         ep_reward += reward
         world_state_tensor = new_world_state_tensor
         steps += 1
         
-    sum_ep_reward += ep_reward
-    ep_counter += 1
+        if len(replay_buffer) > 512:
+            trainer.train_step()
+    
+    last_rewards.append(ep_reward)
+    trainer.add_metric_value('reward', sum(last_rewards) / len(last_rewards))
 
+    rp_size = len(replay_buffer)
     length = time.time() - t0
-    print("Step time: {:1.5f} | Episode time: {:.2f} | Episode Rewards: {:.2f}".format(length / steps, length, ep_reward))
-    
-    debug_info_str = f'Data size: {data_collector.data_size}, '\
-                     f'sessions: {data_collector.n_episodes}, step: {trainer.step}\n'\
-                     f'Current buffer size: {len(data_collector.current_rp_buffer)}'
-    print(debug_info_str)
-    
-    if data_is_updated:
-        avg_ep_reward = sum_ep_reward / ep_counter
-        print(f'Avg episode reward: {avg_ep_reward:.2f}')
-        sum_ep_reward = 0.0
-        ep_counter = 0
-        data_collector.save_rp_buffsers(trainer.log_writer.output_weights_folder)
-        trainer.do_training()
+    print(f"Step time: {length / steps:1.5f} | Replay buffer size: {rp_size} | Episode time: {length:.2f} | Episode Rewards: {ep_reward}")
+

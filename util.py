@@ -54,6 +54,13 @@ class BatchValueList:
         if subset not in self.data:
             raise KeyError(f'subset "{subset}" is not exist')
         self.data[subset][metric_name].append(value)
+        
+    def __len__(self) -> int:
+        size = -1
+        for subset in self.data.values():
+            for values in subset.values():
+                size = max(size,  len(values))
+        return size
 
     def get_values(self) -> tp.Dict[str, tp.Dict[str, float]]:
         out = {
@@ -116,7 +123,6 @@ class LogWriter:
             assert self.save_cfg is not None
             assert 'save_every_n_step' in self.save_cfg
             assert 'n_last_steps' in self.save_cfg
-            assert 'target_metric' in self.save_cfg
             
             self.save_cfg = save_cfg
             self.output_weights_folder = Path(output_weights_folder)
@@ -206,8 +212,8 @@ class LogWriter:
         if self.save_cfg is None:
             return
         model_name = str(self.save_cfg.get('model_name', 'model'))
-        if self.last_values is not None:
-            cfg_target_metric = str(self.save_cfg['target_metric'])
+        cfg_target_metric = self.save_cfg.get('target_metric', None)
+        if self.last_values is not None and cfg_target_metric is  not None:
             target_metric = cfg_target_metric.split('.')
             assert 1 <= len(target_metric) <= 2
             if len(target_metric) == 1:

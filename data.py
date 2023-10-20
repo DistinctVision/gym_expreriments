@@ -6,6 +6,8 @@ from threading import RLock
 import logging
 import shutil
 
+import random
+
 import torch
 
 from tqdm import tqdm
@@ -109,6 +111,9 @@ class ReplayBuffer:
     def clear(self):
         self.buffer = []
         
+    def remove_first_episode(self):
+        self.buffer = self.buffer[1:]
+        
     def save(self, folder_path: tp.Union[Path, str], progress_desc: str = 'Saving'):
         folder_path = Path(folder_path)
         if not folder_path.exists():
@@ -120,6 +125,44 @@ class ReplayBuffer:
             torch.save(episode.world_states, episode_folder / 'world_states.pth')
             torch.save(episode.action_indices, episode_folder / 'action_indices.pth')
             torch.save(episode.rewards, episode_folder / 'rewards.pth')
+            
+    def sample_batch_indices(self, batch_size: int) -> tp.List[int]:
+        batch_indices = []
+        for _ in range(batch_size):
+            rand_ep_idx = random.randint(0, self.num_episodes - 1)
+            rand_record_idx = random.randint(0, self.num_records(rand_ep_idx) - 1)
+            batch_indices.append((rand_ep_idx, rand_record_idx))
+        return batch_indices
+    
+    def sample_batch(self, batch_indices: tp.List[tp.Tuple[int,  int]]) -> tp.Tuple[RecordArray, RecordArray,  torch.Tensor]:
+        cur_records: tp.List[Record] = [self.get_record(idx[0], idx[1])
+                                        for idx in batch_indices]
+        cur_batch = RecordArray(world_states=torch.stack([record.world_state_tensor
+                                                          for record in cur_records]),
+                                action_indices=torch.tensor([record.action_index for record in cur_records],
+                                                            dtype=torch.int16),
+                                rewards=torch.tensor([record.reward
+                                                      for record in cur_records], dtype=torch.float32))
+        
+        next_records: tp.List[Record] = []
+        mask_done: tp.List[bool] = []
+        for r_idx,  idx in enumerate(batch_indices):
+            if (idx[1] + 1) >= self.num_records(idx[0]):
+                next_records.append(cur_records[r_idx])
+                mask_done.append(True)
+                continue
+            next_records.append(self.get_record(idx[0], idx[1] + 1))
+            mask_done.append(False)
+        
+        next_batch = RecordArray(world_states=torch.stack([record.world_state_tensor
+                                                           for record in next_records]),
+                                 action_indices=torch.tensor([record.action_index
+                                                              for record in next_records],
+                                                             dtype=torch.int16),
+                                 rewards=torch.tensor([record.reward for record in next_records],
+                                                       dtype=torch.float32))
+        mask_done = torch.tensor(mask_done, dtype=torch.bool)
+        return cur_batch, next_batch, mask_done
             
             
 
@@ -245,7 +288,9 @@ class SharedDataCollector:
                                           int(self.training_cfg['max_epoch_data_size']))
             epoch_data_size = max(min_epoch_data_size, current_epoch_data_size)
             
-            if len(self.current_rp_buffer) < epoch_data_size:
+            if current_epoch_data_size + len(self.current_rp_buffer) < min_epoch_data_size:
+                return False
+            if self.current_rp_buffer.num_episodes < 2:
                 return False
             
             train_val_ratio = float(self.training_cfg['train_size']) / float(self.training_cfg['val_size'])

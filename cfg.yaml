@@ -2,15 +2,15 @@ model:
   in_size: 4
   out_size: 2
 
-  layers: [512, 256]
+  layers: [256, 128]
   dropout: 0.0
   reward_decay: 0.99
 
-  critic_model_path: '../gym_output/dqn_10_19_2023__22_14_24/weights/critic_model_820.kpt'
-  critic_optimizer_path: '../gym_output/dqn_10_19_2023__22_14_24/weights/opt_critic_model_820.kpt'
+  _critic_model_path: '../gym_output/dqn_10_20_2023__01_24_57/weights/critic_model_1800.kpt'
+  _critic_optimizer_path: '../gym_output/dqn_10_20_2023__01_24_57/weights/opt_critic_model_1800.kpt'
 
 replay_buffer:
-  max_buffer_size: 25600
+  max_buffer_size: 50000
   save_every_n_step: 5
   min_episode_size: 10
   max_episode_size: 1000
@@ -21,18 +21,20 @@ replay_buffer:
 
 
 training:
-  lr: 3e-4
+  lr: 1e-4
   
   batch_size: 128
-  min_epoch_data_size: 12800
-  max_epoch_data_size: 12800
-  n_epochs: 50
   train_size: 0.9
   val_size: 0.1
   n_grad_accum_steps: 1
   grad_norm: 1.0
   fp16: False
-  fixed_model_update_rate: 0.05
+
+  n_local_steps: 2000
+  model_update:
+    n_steps: 1000
+    type: hard
+    rate: 0.01
 
   output_folder: ../gym_output
   
@@ -40,9 +42,9 @@ training:
     model_name: critic_model
     save_every_n_step: 20
     n_last_steps: 3
-    target_metric: val.loss
+    _target_metric: val.loss
     
   eps_greedy:
-    eps_from: 0.5
-    eps_to: 0.1
+    eps_from: 0.9
+    eps_to: 0.05
     n_epochs_of_decays: 100
