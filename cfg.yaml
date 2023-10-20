@@ -32,9 +32,9 @@ training:
 
   n_local_steps: 2000
   model_update:
-    n_steps: 1000
-    type: hard
-    rate: 0.01
+    n_steps: 100
+    type: soft
+    rate: 0.1
 
   output_folder: ../gym_output
   

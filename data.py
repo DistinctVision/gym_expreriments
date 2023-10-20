@@ -1,5 +1,6 @@
 import typing as tp
 from pathlib import Path
+from collections import deque
 
 from dataclasses import dataclass, field
 from threading import RLock
@@ -80,7 +81,7 @@ class ReplayBuffer:
         return rp
     
     def __init__(self):
-        self.buffer: tp.List[RecordArray] = []
+        self.buffer: tp.Deque[RecordArray] = deque()
     
     def __len__(self) -> int:
         return sum([len(session) for session in self.buffer])
@@ -109,10 +110,10 @@ class ReplayBuffer:
         self.buffer.append(RecordArray.from_seq(episode))
         
     def clear(self):
-        self.buffer = []
+        self.buffer = deque()
         
     def remove_first_episode(self):
-        self.buffer = self.buffer[1:]
+        del self.buffer[0]
         
     def save(self, folder_path: tp.Union[Path, str], progress_desc: str = 'Saving'):
         folder_path = Path(folder_path)

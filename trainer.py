@@ -105,17 +105,16 @@ class Trainer:
                                     save_cfg=training_cfg['save'])
     
     
-    def _soft_model_update(self, training_cfg: tp.Dict[str, tp.Any]):
-        fixed_model_update_rate = float(training_cfg['fixed_model_update_rate'])
-        
+    def _soft_model_update(self, update_rate: float):
         with torch.no_grad():
+            inv_update_rate = 1.0 - update_rate
+            
             state_dict = self.target_model.state_dict()
             state_dict = tp.cast(tp.Dict[str, torch.Tensor], state_dict)
             for item_key, item in self.model.state_dict().items():
                 item = tp.cast(torch.Tensor, item)
                 if item.dtype.is_floating_point:
-                    item *= (1 - fixed_model_update_rate)
-                    item += fixed_model_update_rate * state_dict[item_key].detach()
+                    item = item * inv_update_rate + update_rate * state_dict[item_key].detach()
     
     
     def _get_eps_greedy_coeff(self) -> float:
@@ -202,7 +201,8 @@ class Trainer:
             self._training_data.batch_value_list = BatchValueList()
         
         model_update_cfg: dict = training_cfg['model_update']
-        if self.log_writer.step % model_update_cfg['n_steps'] == 0:
+        global_step = self.log_writer.step * n_local_steps + self._training_data.local_step
+        if global_step % model_update_cfg['n_steps'] == 0:
             model_update_type: str =  model_update_cfg['type']
             if model_update_type == 'soft':
                 self._soft_model_update(training_cfg)
