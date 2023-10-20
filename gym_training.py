@@ -61,9 +61,10 @@ while True:
             trainer.train_step()
     
     last_rewards.append(ep_reward)
-    trainer.add_metric_value('reward', sum(last_rewards) / len(last_rewards))
+    last_mean_reward = sum(last_rewards) / len(last_rewards)
+    trainer.add_metric_value('reward', last_mean_reward)
 
     rp_size = len(replay_buffer)
     length = time.time() - t0
-    print(f"Step time: {length / steps:1.5f} | Replay buffer size: {rp_size} | Episode time: {length:.2f} | Episode Rewards: {ep_reward}")
+    print(f"Step time: {length / steps:1.5f} | Replay buffer size: {rp_size} | Mean rewards: {last_mean_reward:.2f} | Episode Rewards: {ep_reward}")
 

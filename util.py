@@ -5,6 +5,7 @@ from copy import deepcopy
 import os
 import json
 import shutil
+import logging
 
 from datetime import datetime
 
@@ -224,15 +225,18 @@ class LogWriter:
                 target_metric = target_metric[1]
             else:
                 raise RuntimeError(f"The invalid target metric: {self.save_cfg['target_metric']}")
-            target_metric_value = self.last_values[target_subset][target_metric]
-            if self.best_weights[0] is None or self.best_weights[0] > target_metric_value:
-                model_ckpt_path: Path = self.output_weights_folder / f'best_{model_name}.kpt'
-                print(f'Best model! {cfg_target_metric} = {target_metric_value:.4}')
-                torch.save(model.state_dict(), model_ckpt_path)
-                self.best_weights = (target_metric_value, model_ckpt_path)
-                best_metric_json_filepath = model_ckpt_path.parent / 'best_metrics.json'
-                with open(best_metric_json_filepath, 'w') as json_file:
-                    json.dump(self.last_values, json_file, indent=4)
+            if target_subset in self.last_values and target_metric in self.last_values[target_subset]:
+                target_metric_value = self.last_values[target_subset][target_metric]
+                if self.best_weights[0] is None or self.best_weights[0] > target_metric_value:
+                    model_ckpt_path: Path = self.output_weights_folder / f'best_{model_name}.kpt'
+                    print(f'Best model! {cfg_target_metric} = {target_metric_value:.4}')
+                    torch.save(model.state_dict(), model_ckpt_path)
+                    self.best_weights = (target_metric_value, model_ckpt_path)
+                    best_metric_json_filepath = model_ckpt_path.parent / 'best_metrics.json'
+                    with open(best_metric_json_filepath, 'w') as json_file:
+                        json.dump(self.last_values, json_file, indent=4)
+            else:
+                logging.warning(f'"{cfg_target_metric}" is not found in metric values')
                     
         if self.step % int(self.save_cfg['save_every_n_step']) != 0:
             return

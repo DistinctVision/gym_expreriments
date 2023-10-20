@@ -10,7 +10,7 @@ from dataclasses  import dataclass
 
 import numpy as np
 import torch
-import einops
+from tqdm import tqdm
 
 from util import LogWriter, get_run_name, make_output_folder, BatchValueList
 from data import ReplayBuffer,  SeqRecords
@@ -22,6 +22,7 @@ class TrainingData:
     grad_accum_counter: int
     batch_value_list: BatchValueList
     local_step: int = 0
+    progress_bar: tp.Optional[tqdm] = None
     
 
 class Trainer:
@@ -44,7 +45,11 @@ class Trainer:
         self._init_models()
         self._init_log()
         
-        self._training_data = TrainingData(0, self.log_writer.make_batch_value_list())
+        training_cfg = dict(self.cfg['training'])
+        n_local_steps = int(training_cfg['n_local_steps'])
+        self._training_data = TrainingData(0, self.log_writer.make_batch_value_list(),
+                                           progress_bar=tqdm(total=n_local_steps,
+                                                             desc=f'Epoch[{self.log_writer.step}]'))
         
     @property
     def step(self) -> int:
@@ -185,6 +190,7 @@ class Trainer:
         eps_greedy = self._get_eps_greedy_coeff()
         self._training_data.batch_value_list.add(eps_greedy, 'eps_greedy')
         
+        self._training_data.progress_bar.update(1)
         self._training_data.local_step += 1
         n_local_steps = int(training_cfg['n_local_steps'])
         if self._training_data.local_step >= n_local_steps:
@@ -199,6 +205,8 @@ class Trainer:
             self.log_writer.save_weights(self.model, self.optimizer)
             self.log_writer.update_step()
             self._training_data.batch_value_list = BatchValueList()
+            del self._training_data.progress_bar
+            self._training_data.progress_bar = tqdm(total=n_local_steps, desc=f'Epoch[{self.log_writer.step}]')
         
         model_update_cfg: dict = training_cfg['model_update']
         global_step = self.log_writer.step * n_local_steps + self._training_data.local_step

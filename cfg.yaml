@@ -32,8 +32,8 @@ training:
 
   n_local_steps: 2000
   model_update:
-    n_steps: 100
-    type: soft
+    n_steps: 6000
+    type: hard
     rate: 0.1
 
   output_folder: ../gym_output
@@ -42,7 +42,7 @@ training:
     model_name: critic_model
     save_every_n_step: 20
     n_last_steps: 3
-    _target_metric: val.loss
+    target_metric: reward
     
   eps_greedy:
     eps_from: 0.9
