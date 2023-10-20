@@ -6,6 +6,7 @@ import os
 import json
 import shutil
 import logging
+import operator
 
 from datetime import datetime
 
@@ -215,6 +216,10 @@ class LogWriter:
         model_name = str(self.save_cfg.get('model_name', 'model'))
         cfg_target_metric = self.save_cfg.get('target_metric', None)
         if self.last_values is not None and cfg_target_metric is  not None:
+            target_op = {
+                '<': operator.le,
+                '>': operator.ge,
+            }[self.save_cfg.get('target_op', '<')]
             target_metric = cfg_target_metric.split('.')
             assert 1 <= len(target_metric) <= 2
             if len(target_metric) == 1:
@@ -227,7 +232,7 @@ class LogWriter:
                 raise RuntimeError(f"The invalid target metric: {self.save_cfg['target_metric']}")
             if target_subset in self.last_values and target_metric in self.last_values[target_subset]:
                 target_metric_value = self.last_values[target_subset][target_metric]
-                if self.best_weights[0] is None or self.best_weights[0] > target_metric_value:
+                if self.best_weights[0] is None or target_op(target_metric_value, self.best_weights[0]):
                     model_ckpt_path: Path = self.output_weights_folder / f'best_{model_name}.kpt'
                     print(f'Best model! {cfg_target_metric} = {target_metric_value:.4}')
                     torch.save(model.state_dict(), model_ckpt_path)
