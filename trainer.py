@@ -205,7 +205,7 @@ class Trainer:
         if global_step % model_update_cfg['n_steps'] == 0:
             model_update_type: str =  model_update_cfg['type']
             if model_update_type == 'soft':
-                self._soft_model_update(training_cfg)
+                self._soft_model_update(float(model_update_cfg['rate']))
             elif model_update_type == 'hard':
                 self.model.load_state_dict(self.target_model.state_dict())
             else:
