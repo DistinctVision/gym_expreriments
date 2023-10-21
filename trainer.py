@@ -63,13 +63,13 @@ class Trainer:
         training_cfg = dict(self.cfg['training'])
         
         self.model = CriticModel.build_model(model_cfg)
+        self.target_model = CriticModel.build_model(model_cfg)
         if 'critic_model_path' in model_cfg:
             ckpt = torch.load(str(model_cfg['critic_model_path']), map_location='cpu')
-            self.model.load_state_dict(ckpt)
+            self.target_model.load_state_dict(ckpt)
         else:
-            self.model.init_weights()
-        self.target_model = CriticModel.build_model(model_cfg)
-        self.target_model.load_state_dict(self.model.state_dict())
+            self.target_model.init_weights()
+        self._hard_model_update()
         self.model = self.model.to(self.device).eval()
         self.target_model = self.target_model.to(self.device)
         self.target_model.train()
@@ -78,9 +78,12 @@ class Trainer:
         print(f'A size of the model: {get_model_num_params(self.model)}')
         
         non_frozen_critic_parameters = [param for param in self.target_model.parameters() if param.requires_grad]
-        self.optimizer = torch.optim.Adam(non_frozen_critic_parameters,
-                                          lr=float(training_cfg['lr']),
-                                          betas=(0.9, 0.999), eps=1e-8)
+        # self.optimizer = torch.optim.Adam(non_frozen_critic_parameters,
+        #                                   lr=float(training_cfg['lr']),
+        #                                   betas=(0.9, 0.999), eps=1e-8)
+        self.optimizer = torch.optim.RMSprop(non_frozen_critic_parameters,
+                                             lr=float(training_cfg['lr']),
+                                             alpha=0.99, eps=1e-8)
         optimizer_path = model_cfg.get('critic_optimizer_path', None)
         if optimizer_path is not None:
             optimizer_path = Path(optimizer_path)
@@ -119,7 +122,17 @@ class Trainer:
             for item_key, item in self.model.state_dict().items():
                 item = tp.cast(torch.Tensor, item)
                 if item.dtype.is_floating_point:
-                    item = item * inv_update_rate + update_rate * state_dict[item_key].detach()
+                    item.data.copy_(item.data * inv_update_rate + state_dict[item_key].data * update_rate)
+    
+    
+    def _hard_model_update(self):
+        with torch.no_grad():
+            state_dict = self.target_model.state_dict()
+            state_dict = tp.cast(tp.Dict[str, torch.Tensor], state_dict)
+            for item_key, item in self.model.state_dict().items():
+                item = tp.cast(torch.Tensor, item)
+                if item.dtype.is_floating_point:
+                    item.data.copy_(state_dict[item_key].data)
     
     
     def _get_eps_greedy_coeff(self) -> float:
@@ -128,8 +141,10 @@ class Trainer:
         eps_from = float(eps_greedy_cfg['eps_from'])
         eps_to = float(eps_greedy_cfg['eps_to'])
         n_epochs_of_decays = int(eps_greedy_cfg['n_epochs_of_decays'])
+        n_local_steps = int(training_cfg['n_local_steps'])
+        global_step = self.log_writer.step * n_local_steps + self._training_data.local_step
 
-        step_coeff = min(max(self.step / n_epochs_of_decays, 0.0), 1.0)
+        step_coeff = min(max(global_step / n_epochs_of_decays, 0.0), 1.0)
         eps_greedy_coeff = eps_from + (eps_to - eps_from) * step_coeff
         return eps_greedy_coeff
     
@@ -215,7 +230,7 @@ class Trainer:
             if model_update_type == 'soft':
                 self._soft_model_update(float(model_update_cfg['rate']))
             elif model_update_type == 'hard':
-                self.model.load_state_dict(self.target_model.state_dict())
+                self._hard_model_update()
             else:
                 raise RuntimeError(f'Unknown model update type: {model_update_type}')
         

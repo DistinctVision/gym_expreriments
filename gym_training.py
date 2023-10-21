@@ -23,8 +23,8 @@ episode_data_recorder = EpisodeDataRecorder(trainer)
 
 
 if game_name == 'CartPole-v1':
-    std_world_state = torch.tensor([0.0896, 0.5494, 0.0921, 0.8163], dtype=torch.float32)
-    mean_world_state = torch.tensor([0.0021, -0.0457,  0.0094,  0.0996], dtype=torch.float32)
+    std_world_state = torch.tensor([2.5, 2.5, 0.3, 0.3], dtype=torch.float32)
+    mean_world_state = torch.tensor([0.0, 0.0,  0.0,  0.0], dtype=torch.float32)
 elif game_name == 'LunarLander-v2':
     std_world_state = torch.tensor([1.5, 1.5, 5., 5., 3.1415927, 5., 1., 1.], dtype=torch.float32)
     mean_world_state = torch.tensor([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], dtype=torch.float32)
@@ -38,6 +38,8 @@ def preprocess(world_state: np.ndarray) -> torch.Tensor:
 
 
 last_rewards = deque(maxlen=100)
+
+ep_counter = 0
 
 env = gym.make(game_name)
 env.reset()
@@ -71,8 +73,10 @@ while True:
     last_rewards.append(ep_reward)
     last_mean_reward = sum(last_rewards) / len(last_rewards)
     trainer.add_metric_value('reward', last_mean_reward)
+    
+    ep_counter += 1
 
     rp_size = len(replay_buffer)
     length = time.time() - t0
-    print(f"Step time: {length / steps:1.5} | Replay buffer size: {rp_size} | Mean rewards: {last_mean_reward:.2f} | Episode Rewards: {ep_reward:.2f}")
+    print(f"Episode: {ep_counter} | Replay buffer size: {rp_size} | Mean rewards: {last_mean_reward:.2f} | Episode Rewards: {ep_reward:.2f}")
 
