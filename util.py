@@ -239,7 +239,9 @@ class LogWriter:
                     self.best_weights = (target_metric_value, model_ckpt_path)
                     best_metric_json_filepath = model_ckpt_path.parent / 'best_metrics.json'
                     with open(best_metric_json_filepath, 'w') as json_file:
-                        json.dump(self.last_values, json_file, indent=4)
+                        best_values = {k: v for k, v in self.last_values.items()}
+                        best_values['step'] = self.step
+                        json.dump(best_values, json_file, indent=4)
             else:
                 logging.warning(f'"{cfg_target_metric}" is not found in metric values')
                     
