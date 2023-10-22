@@ -156,6 +156,8 @@ class Trainer:
         n_grad_accum_steps: int = training_cfg.get('n_grad_accum_steps', 1)
         batch_size: int = training_cfg['batch_size']
         grad_norm: tp.Optional[float] = training_cfg.get('grad_norm', None)
+        
+        is_double = bool(training_cfg['is_double'])
             
         if bool(training_cfg['fp16']):
             precision_ctx = torch.amp.autocast(device_type='cuda', dtype=torch.float16)
@@ -174,7 +176,13 @@ class Trainer:
                 next_pr_rewards = self.model(batch_world_states_tensor=batch_world_states_tensor)
                 next_pr_rewards = tp.cast(torch.Tensor, next_pr_rewards)
                 next_pr_rewards[mask_done][:] = 0.0
-                next_pr_rewards = next_pr_rewards.max(-1)[0].detach()
+                if is_double:
+                    next_pr_rewards_2: torch.Tensor = self.target_model(
+                        batch_world_states_tensor=batch_world_states_tensor)
+                    best_actions = next_pr_rewards_2.argmax(dim=-1).unsqueeze(1)
+                    next_pr_rewards = next_pr_rewards.gather(dim=1, index=best_actions)
+                else:
+                    next_pr_rewards = next_pr_rewards.max(-1)[0].detach()
                 
             batch_world_states_tensor = cur_records_batch.world_states.to(self.device)
             rewards = (cur_records_batch.rewards.to(self.device) + next_pr_rewards * self.model.reward_decay)
