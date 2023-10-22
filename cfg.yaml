@@ -6,17 +6,14 @@ model:
   dropout: 0.0
   reward_decay: 0.99
 
-  critic_model_path: '../gym_output/dqn_10_20_2023__20_01_06/weights/lunar_lander_560.kpt'
-  _critic_optimizer_path: '../gym_output/dqn_10_20_2023__01_24_57/weights/opt_critic_model_1800.kpt'
+  critic_model_path: '../gym_output/dqn_10_22_2023__08_00_53/weights/lunar_lander_270.kpt'
+  _critic_optimizer_path: '../gym_output/dqn_10_22_2023__08_00_53/weights/opt_lunar_lander_270.kpt'
 
 game:
   name: LunarLander-v2
 
 replay_buffer:
-  max_buffer_size: 150000
-  save_every_n_step: 5
-  min_episode_size: 10
-  max_episode_size: 1000
+  max_buffer_size: 50000
   path: ../nexto_rp_0_wr.pth
   _data_dir: ../gym_output/dqn_10_19_2023__15_29_00/weights
   _cached_rnn_dir: /media/alex/SSD/rnn_cache
@@ -24,6 +21,7 @@ replay_buffer:
 
 
 training:
+  train_freq: 8
   lr: 1e-4
   
   batch_size: 512
@@ -33,22 +31,22 @@ training:
   grad_norm: 1.0
   fp16: False
 
-  n_local_steps: 2000
+  n_local_steps: 1000
   model_update:
-    n_steps: 2000
-    type: hard
-    rate: 0.1
+    n_steps: 100
+    type: soft
+    rate: 1e-4
 
   output_folder: ../gym_output
   
   save:
     model_name: lunar_lander
-    save_every_n_step: 20
-    n_last_steps: 3
+    save_every_n_step: 10
+    n_last_steps: 50
     target_metric: reward
     target_op: '>'
     
   eps_greedy:
-    eps_from: 0.6
-    eps_to: 0.05
-    n_epochs_of_decays: 300
+    eps_from: 0.4
+    eps_to: 0.1
+    n_epochs_of_decays: 5000000

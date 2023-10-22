@@ -1,17 +1,14 @@
-from pathlib import Path
 import yaml
-import time
 
 from collections import deque
 
 import numpy as np
 import torch
-import gymnasium as gym
-
-import plotly.express as ex
 
 from trainer import Trainer, EpisodeDataRecorder
 from data import ReplayBuffer
+
+from stable_baselines3.common.env_util import make_vec_env
 
 
 cfg = yaml.safe_load(open('cfg.yaml', 'r'))
@@ -19,7 +16,6 @@ game_name = str(cfg['game']['name'])
 
 replay_buffer = ReplayBuffer()
 trainer = Trainer(cfg, replay_buffer)
-episode_data_recorder = EpisodeDataRecorder(trainer)
 
 
 if game_name == 'CartPole-v1':
@@ -41,42 +37,55 @@ last_rewards = deque(maxlen=100)
 
 ep_counter = 0
 
-env = gym.make(game_name)
+env = make_vec_env(game_name, n_envs=6, seed=np.random.randint(0, 2 ** 16 - 1))
 env.reset()
 
+episode_data_recorders = [EpisodeDataRecorder(trainer) for _ in range(env.num_envs)]
+
+train_counter = 0
+train_freq = int(cfg['training']['train_freq'])
+
 while True:
-    world_state_tensor, state = env.reset()
-    world_state_tensor = preprocess(world_state_tensor)
-    done = False
+    world_state_tensors = env.reset()
+    world_state_tensors = [preprocess(world_state_tensor) for world_state_tensor in world_state_tensors]
+    dones = np.array([False for _ in range(env.num_envs)], dtype=bool)
     steps = 0
-    ep_reward = 0
-    t0 = time.time()
+    ep_rewards = np.zeros((env.num_envs,), dtype=np.float32)
     
-    data_is_updated = False
-    
-    while not done:
-        action_idx = episode_data_recorder.get_action(world_state_tensor)
-        new_world_state_tensor, reward, terminated, truncated, state = env.step(action_idx)
-        new_world_state_tensor = preprocess(new_world_state_tensor)
-        done = terminated or truncated
-    
-        data_is_updated_ = episode_data_recorder.record(world_state_tensor, action_idx, reward, done)
-        data_is_updated = data_is_updated or data_is_updated_
-        
-        ep_reward += reward
-        world_state_tensor = new_world_state_tensor
-        steps += 1
+    while not dones.all():
+        actions = [episode_data_recorder.get_action(world_state_tensor)
+                   for episode_data_recorder, world_state_tensor in zip(episode_data_recorders, world_state_tensors)]
+        env.step_async(actions)
         
         if len(replay_buffer) > 2048:
-            trainer.train_step()
+            train_counter += env.num_envs
+            if train_counter >= train_freq:
+                trainer.train_step()
+                train_counter = 0
+        
+        new_world_state_tensors, rewards, next_dones, states = env.step_wait()
+        new_world_state_tensors = [preprocess(world_state_tensor) for world_state_tensor in new_world_state_tensors]
+        next_dones = np.logical_or(dones, next_dones)
+
+        for episode_data_recorder, world_state_tensor, action_idx, reward, done, next_done in \
+                zip(episode_data_recorders, world_state_tensors, actions, rewards, dones, next_dones):
+            if done:
+                continue
+            episode_data_recorder.record(world_state_tensor, action_idx, reward, next_done)
+        
+        dones = next_dones
+        ep_rewards += rewards
+        world_state_tensors = new_world_state_tensors
+        steps += 1
     
-    last_rewards.append(ep_reward)
+    for reward in ep_rewards:
+        last_rewards.append(reward)
     last_mean_reward = sum(last_rewards) / len(last_rewards)
     trainer.add_metric_value('reward', last_mean_reward)
     
     ep_counter += 1
 
     rp_size = len(replay_buffer)
-    length = time.time() - t0
-    print(f"Episode: {ep_counter} | Replay buffer size: {rp_size} | Mean rewards: {last_mean_reward:.2f} | Episode Rewards: {ep_reward:.2f}")
-
+    ep_rewards_str = ', '.join([f'{reward:.2f}' for reward in ep_rewards])
+    print(f'Episode: {ep_counter} | Replay buffer size: {rp_size} | Mean rewards: {last_mean_reward:.2f} |'\
+          f'Episode Rewards: {ep_rewards_str}')
