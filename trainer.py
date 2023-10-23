@@ -179,8 +179,9 @@ class Trainer:
                 if is_double:
                     next_pr_rewards_2: torch.Tensor = self.target_model(
                         batch_world_states_tensor=batch_world_states_tensor)
-                    best_actions = next_pr_rewards_2.argmax(dim=-1).unsqueeze(1)
-                    next_pr_rewards = next_pr_rewards.gather(dim=1, index=best_actions)
+                    best_actions = next_pr_rewards_2.argmax(dim=-1).unsqueeze(0)
+                    next_pr_rewards = next_pr_rewards.gather(dim=1, index=best_actions).detach()
+                    next_pr_rewards.squeeze_(0)
                 else:
                     next_pr_rewards = next_pr_rewards.max(-1)[0].detach()
                 
