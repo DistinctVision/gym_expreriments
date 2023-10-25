@@ -29,24 +29,33 @@ def preprocess(world_state: np.ndarray) -> torch.Tensor:
 env = gym.make(game_name, render_mode="human")
 
 model = CriticModel.build_model(cfg['model'])
-ckpt = torch.load('../critic_model_320.kpt', map_location='cpu')
+ckpt = torch.load(cfg['model']['critic_model_path'], map_location='cpu')
 model.load_state_dict(ckpt)
 
 while True:
-    world_state_tensor, info = env.reset(seed=42)
-    world_state_tensor = preprocess(world_state_tensor)
+    cur_world_state_tensor, info = env.reset()
+    cur_world_state_tensor = preprocess(cur_world_state_tensor)
+    prev_world_state_tensor = cur_world_state_tensor
     
-    for _ in range(1000):
+    ep_reward = 0
+    
+    for _ in range(500):
         with torch.no_grad():
-            pr_rewards: torch.Tensor = model(world_state_tensor.unsqueeze(0).to(model.device))
+            pr_rewards: torch.Tensor = model(prev_world_state_tensor.unsqueeze(0).to(model.device),
+                                             cur_world_state_tensor.unsqueeze(0).to(model.device))
             pr_rewards = pr_rewards.squeeze(0).cpu()
         action = int(pr_rewards.argmax(0))
-        world_state_tensor, reward, terminated, truncated, info = env.step(action)
-        world_state_tensor = preprocess(world_state_tensor)
+        prev_world_state_tensor = cur_world_state_tensor
+        cur_world_state_tensor, reward, terminated, truncated, info = env.step(action)
+        cur_world_state_tensor = preprocess(cur_world_state_tensor)
+        
+        ep_reward += reward
         
         env.render()
         
         if terminated or truncated:
             break
+    
+    print(f'Reward: {ep_reward}')
 
 env.close()

@@ -42,7 +42,7 @@ class CriticModel(torch.nn.Module):
         super().__init__()
         self.reward_decay = reward_decay
         
-        self.in_proj = torch.nn.Sequential(torch.nn.Linear(in_size, layers[0]), torch.nn.ReLU())
+        self.in_proj = torch.nn.Sequential(torch.nn.Linear(in_size * 2, layers[0]), torch.nn.ReLU())
         
         block_layers = []
         for layer_in, layar_out in zip(layers[:-1], layers[1:]):
@@ -72,9 +72,10 @@ class CriticModel(torch.nn.Module):
         torch.nn.init.kaiming_uniform_(self.out_proj.weight)
         torch.nn.init.uniform_(self.out_proj.bias, a=-5e-3, b=5e-3)
     
-    def forward(self, batch_world_states_tensor: torch.Tensor) -> torch.Tensor:
+    def forward(self, batch_prev_world_states_tensor: torch.Tensor,
+                batch_cur_world_states_tensor: torch.Tensor) -> torch.Tensor:
         
-        in_state = batch_world_states_tensor
+        in_state = torch.cat([batch_prev_world_states_tensor, batch_cur_world_states_tensor], dim=-1)
         
         x: torch.Tensor = self.in_proj(in_state)
         x = self.blocks(x)

@@ -5,7 +5,7 @@ from collections import deque
 import numpy as np
 import torch
 
-from trainer import Trainer, EpisodeDataRecorder
+from dqn.trainer import DqnTrainer, EpisodeDataRecorder
 from data import ReplayBuffer
 
 from stable_baselines3.common.env_util import make_vec_env
@@ -15,7 +15,7 @@ cfg = yaml.safe_load(open('cfg.yaml', 'r'))
 game_name = str(cfg['game']['name'])
 
 replay_buffer = ReplayBuffer()
-trainer = Trainer(cfg, replay_buffer)
+trainer = DqnTrainer(cfg, replay_buffer)
 
 
 if game_name == 'CartPole-v1':
@@ -46,15 +46,17 @@ train_counter = 0
 train_freq = int(cfg['training']['train_freq'])
 
 while True:
-    world_state_tensors = env.reset()
-    world_state_tensors = [preprocess(world_state_tensor) for world_state_tensor in world_state_tensors]
+    cur_world_state_tensors = env.reset()
+    cur_world_state_tensors = [preprocess(world_state_tensor) for world_state_tensor in cur_world_state_tensors]
+    prev_world_state_tensors = cur_world_state_tensors
     dones = np.array([False for _ in range(env.num_envs)], dtype=bool)
     steps = 0
     ep_rewards = np.zeros((env.num_envs,), dtype=np.float32)
     
     while not dones.all():
-        actions = [episode_data_recorder.get_action(world_state_tensor)
-                   for episode_data_recorder, world_state_tensor in zip(episode_data_recorders, world_state_tensors)]
+        actions = [episode_data_recorder.get_action(prev_world_state_tensor, cur_world_state_tensor)
+                   for episode_data_recorder, prev_world_state_tensor, cur_world_state_tensor in \
+                       zip(episode_data_recorders, prev_world_state_tensors, cur_world_state_tensors)]
         env.step_async(actions)
         
         if len(replay_buffer) > 2048:
@@ -68,14 +70,15 @@ while True:
         next_dones = np.logical_or(dones, next_dones)
 
         for episode_data_recorder, world_state_tensor, action_idx, reward, done, next_done in \
-                zip(episode_data_recorders, world_state_tensors, actions, rewards, dones, next_dones):
+                zip(episode_data_recorders, cur_world_state_tensors, actions, rewards, dones, next_dones):
             if done:
                 continue
             episode_data_recorder.record(world_state_tensor, action_idx, reward, next_done)
         
         dones = next_dones
+        prev_world_state_tensors = cur_world_state_tensors
+        cur_world_state_tensors = new_world_state_tensors
         ep_rewards += rewards
-        world_state_tensors = new_world_state_tensors
         steps += 1
     
     for reward in ep_rewards:

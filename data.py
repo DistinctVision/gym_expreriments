@@ -135,35 +135,55 @@ class ReplayBuffer:
             batch_indices.append((rand_ep_idx, rand_record_idx))
         return batch_indices
     
-    def sample_batch(self, batch_indices: tp.List[tp.Tuple[int,  int]]) -> tp.Tuple[RecordArray, RecordArray,  torch.Tensor]:
-        cur_records: tp.List[Record] = [self.get_record(idx[0], idx[1])
-                                        for idx in batch_indices]
-        cur_batch = RecordArray(world_states=torch.stack([record.world_state_tensor
-                                                          for record in cur_records]),
-                                action_indices=torch.tensor([record.action_index for record in cur_records],
-                                                            dtype=torch.int16),
-                                rewards=torch.tensor([record.reward
-                                                      for record in cur_records], dtype=torch.float32))
+    def get_seq_batch(self, batch_indices: tp.List[tp.Tuple[int,  int]],
+                      sequence_size: int) -> tp.Tuple[RecordArray, RecordArray, torch.Tensor]:
         
-        next_records: tp.List[Record] = []
-        mask_done: tp.List[bool] = []
-        for r_idx,  idx in enumerate(batch_indices):
-            if (idx[1] + 1) >= self.num_records(idx[0]):
-                next_records.append(cur_records[r_idx])
-                mask_done.append(True)
+        batch_episodes = [self.buffer[idx[0]] for idx in batch_indices]
+        
+        world_states = [episode.world_states[idx[1]:idx[1]+sequence_size]
+                        for idx, episode in zip(batch_indices, batch_episodes)]
+        action_indices = [episode.action_indices[idx[1]:idx[1]+sequence_size]
+                         for idx, episode in zip(batch_indices, batch_episodes)]
+        rewards = [episode.rewards[idx[1]:idx[1]+sequence_size]
+                   for idx, episode in zip(batch_indices, batch_episodes)]
+        for el_idx in range(len(batch_indices)):
+            ext_size = sequence_size - world_states[el_idx].shape[0]
+            if ext_size <= 0:
                 continue
-            next_records.append(self.get_record(idx[0], idx[1] + 1))
-            mask_done.append(False)
+            ext_world_states = torch.stack([world_states[el_idx][0, :]] * ext_size)
+            ext_action_indices = torch.stack([action_indices[el_idx][0]] * ext_size)
+            ext_rewards = torch.stack([rewards[el_idx][0]] * ext_size)
+            world_states[el_idx] = torch.cat([ext_world_states, world_states[el_idx]])
+            action_indices[el_idx] = torch.cat([ext_action_indices, action_indices[el_idx]])
+            rewards[el_idx] = torch.cat([ext_rewards, rewards[el_idx]])
+        cur_batch = RecordArray(world_states=torch.stack(world_states),
+                                action_indices=torch.stack(action_indices),
+                                rewards=torch.stack(rewards))
         
-        next_batch = RecordArray(world_states=torch.stack([record.world_state_tensor
-                                                           for record in next_records]),
-                                 action_indices=torch.tensor([record.action_index
-                                                              for record in next_records],
-                                                             dtype=torch.int16),
-                                 rewards=torch.tensor([record.reward for record in next_records],
-                                                       dtype=torch.float32))
-        mask_done = torch.tensor(mask_done, dtype=torch.bool)
-        return cur_batch, next_batch, mask_done
+        next_world_states = []
+        next_action_indices = []
+        next_rewards = []
+        mask_done = []
+        for idx, episode, cur_world_states, cur_action_indices, cur_rewards in \
+                zip(batch_indices, batch_episodes, world_states, action_indices, rewards):
+            done = (idx[1] + sequence_size) >= len(episode)
+            if done:
+                mask_done.append(True)
+                next_world_states.append(torch.cat([cur_world_states[1:, :], cur_world_states[-1, :].unsqueeze(0)]))
+                next_action_indices.append(torch.cat([cur_action_indices[1:], cur_action_indices[-1].unsqueeze(0)]))
+                next_rewards.append(torch.cat([cur_rewards[1:], cur_rewards[-1].unsqueeze(0)]))
+                continue
+            mask_done.append(False)
+            next_world_states.append(torch.cat([cur_world_states[1:, :],
+                                                episode.world_states[idx[1] + sequence_size, :].unsqueeze(0)]))
+            next_action_indices.append(torch.cat([cur_action_indices[1:],
+                                                  episode.action_indices[idx[1] + sequence_size].unsqueeze(0)]))
+            next_rewards.append(torch.cat([cur_rewards[1:], episode.rewards[idx[1] + sequence_size].unsqueeze(0)]))
+        next_batch = RecordArray(world_states=torch.stack(next_world_states),
+                                 action_indices=torch.stack(next_action_indices),
+                                 rewards=torch.stack(next_rewards))
+        
+        return cur_batch, next_batch, torch.tensor(mask_done, dtype=torch.bool)
             
             
 
@@ -190,40 +210,15 @@ class Dataset:
     
     def __init__(self,
                  cached_replay_buffer: ReplayBuffer,
-                 batch_sampler: ReplayBufferBatchSampler):
+                 batch_sampler: ReplayBufferBatchSampler,
+                 sequence_size: int):
         self.cached_replay_buffer = cached_replay_buffer
         self.batch_sampler = batch_sampler
+        self.sequence_size = sequence_size
     
-    def get_batch(self, index: int) -> tp.Tuple[RecordArray, RecordArray,  torch.Tensor]:
+    def get_batch(self, index: int) -> tp.Tuple[RecordArray, RecordArray, torch.Tensor]:
         batch_indices = self.batch_sampler.get_batch_indices(index)
-        cur_records: tp.List[Record] = [self.cached_replay_buffer.get_record(idx[0], idx[1])
-                                        for idx in batch_indices]
-        cur_batch = RecordArray(world_states=torch.stack([record.world_state_tensor
-                                                          for record in cur_records]),
-                                           action_indices=torch.tensor([record.action_index for record in cur_records],
-                                                                       dtype=torch.int16),
-                                           rewards=torch.tensor([record.reward
-                                                                 for record in cur_records], dtype=torch.float32))
-        
-        next_records: tp.List[Record] = []
-        mask_done: tp.List[bool] = []
-        for r_idx,  idx in enumerate(batch_indices):
-            if (idx[1] + 1) >= self.cached_replay_buffer.num_records(idx[0]):
-                next_records.append(cur_records[r_idx])
-                mask_done.append(True)
-                continue
-            next_records.append(self.cached_replay_buffer.get_record(idx[0], idx[1] + 1))
-            mask_done.append(False)
-        
-        next_batch = RecordArray(world_states=torch.stack([record.world_state_tensor
-                                                           for record in next_records]),
-                                 action_indices=torch.tensor([record.action_index
-                                                              for record in next_records],
-                                                             dtype=torch.int16),
-                                 rewards=torch.tensor([record.reward for record in next_records],
-                                                       dtype=torch.float32))
-        mask_done = torch.tensor(mask_done, dtype=torch.bool)
-        return cur_batch, next_batch, mask_done
+        return self.cached_replay_buffer.get_seq_batch(batch_indices, self.sequence_size)
         
     def __len__(self) -> int:
         return len(self.batch_sampler)

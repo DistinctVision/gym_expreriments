@@ -25,7 +25,7 @@ class TrainingData:
     progress_bar: tp.Optional[tqdm] = None
     
 
-class Trainer:
+class DqnTrainer:
 
     def __init__(self,
                  cfg: tp.Dict[str, tp.Any],
@@ -42,8 +42,8 @@ class Trainer:
 
         self.log_writer: tp.Optional[LogWriter] = None
 
-        self._init_models()
         self._init_log()
+        self._init_models()
         
         training_cfg = dict(self.cfg['training'])
         n_local_steps = int(training_cfg['n_local_steps'])
@@ -142,10 +142,9 @@ class Trainer:
         eps_to = float(eps_greedy_cfg['eps_to'])
         n_epochs_of_decays = int(eps_greedy_cfg['n_epochs_of_decays'])
         n_local_steps = int(training_cfg['n_local_steps'])
-        global_step = self.log_writer.step * n_local_steps + self._training_data.local_step
-
+        global_step = (self.log_writer.step - 1) * n_local_steps + self._training_data.local_step
         step_coeff = min(max(global_step / n_epochs_of_decays, 0.0), 1.0)
-        eps_greedy_coeff = eps_from + (eps_to - eps_from) * step_coeff
+        eps_greedy_coeff = eps_from * math.exp(math.log(eps_to / eps_from) * step_coeff)
         return eps_greedy_coeff
     
     
@@ -167,29 +166,30 @@ class Trainer:
             grad_scaler = torch.cuda.amp.GradScaler(enabled=False)
         
         batch_indices = self.replay_buffer.sample_batch_indices(batch_size)
-        cur_records_batch, next_records_batch, mask_done = self.replay_buffer.sample_batch(batch_indices)
+        cur_seq_batch, next_seq_batch, mask_done = self.replay_buffer.get_seq_batch(batch_indices, 2)
         sync_grad = (self._training_data.grad_accum_counter + 1) >= n_grad_accum_steps
                 
         with precision_ctx:
-            batch_world_states_tensor = next_records_batch.world_states.to(self.device)
+            next_world_states_tensor = next_seq_batch.world_states.to(self.device)
             with torch.no_grad():
-                next_pr_rewards = self.model(batch_world_states_tensor=batch_world_states_tensor)
+                next_pr_rewards = self.model(next_world_states_tensor[:, 0, :], next_world_states_tensor[:, 1, :])
                 next_pr_rewards = tp.cast(torch.Tensor, next_pr_rewards)
                 next_pr_rewards[mask_done][:] = 0.0
                 if is_double:
-                    next_pr_rewards_2: torch.Tensor = self.target_model(
-                        batch_world_states_tensor=batch_world_states_tensor)
+                    next_pr_rewards_2: torch.Tensor = self.target_model(next_world_states_tensor[:, 0, :],
+                                                                        next_world_states_tensor[:, 1, :])
                     best_actions = next_pr_rewards_2.argmax(dim=-1).unsqueeze(0)
                     next_pr_rewards = next_pr_rewards.gather(dim=1, index=best_actions).detach()
                     next_pr_rewards.squeeze_(0)
                 else:
                     next_pr_rewards = next_pr_rewards.max(-1)[0].detach()
                 
-            batch_world_states_tensor = cur_records_batch.world_states.to(self.device)
-            rewards = (cur_records_batch.rewards.to(self.device) + next_pr_rewards * self.model.reward_decay)
+            cur_world_states_tensor = cur_seq_batch.world_states.to(self.device)
+            rewards = (cur_seq_batch.rewards[:, -1].to(self.device) + next_pr_rewards * self.model.reward_decay)
             with nullcontext():
-                pr_rewards: torch.Tensor = self.target_model(batch_world_states_tensor=batch_world_states_tensor)
-                action_indices = cur_records_batch.action_indices.unsqueeze(1).long().to(self.device)
+                pr_rewards: torch.Tensor = self.target_model(cur_world_states_tensor[:, 0, :],
+                                                             cur_world_states_tensor[:, 1, :])
+                action_indices = cur_seq_batch.action_indices[:, -1].unsqueeze(1).long().to(self.device)
                 pr_rewards = pr_rewards.gather(dim=1, index=action_indices).squeeze(1)
                 
                 loss = torch.nn.functional.smooth_l1_loss(pr_rewards, rewards)
@@ -246,15 +246,16 @@ class Trainer:
 
 class EpisodeDataRecorder:
     
-    def __init__(self, trainer: Trainer):
+    def __init__(self, trainer: DqnTrainer):
         self.trainer = trainer
         self.current_episode = SeqRecords()
     
     def __len__(self) -> int:
         return len(self.current_episode)
     
-    def get_action(self, world_state_tensor: torch.Tensor) -> int:
-        return self._get_action_idx(world_state_tensor)
+    def get_action(self, prev_world_state_tensor: torch.Tensor,
+                   next_worrld_state_tensor: torch.Tensor) -> int:
+        return self._get_action_idx(prev_world_state_tensor, next_worrld_state_tensor)
     
     def record(self,
                world_state_tensor: torch.Tensor,
@@ -272,15 +273,16 @@ class EpisodeDataRecorder:
                 
         return data_is_updated
     
-    def _get_action_idx(self, world_state_tensor: torch.Tensor) -> int:
+    def _get_action_idx(self, prev_world_state_tensor: torch.Tensor,
+                        next_worrld_state_tensor: torch.Tensor) -> int:
         eps_greedy_coeff = self.trainer._get_eps_greedy_coeff()
         if np.random.uniform(0, 1) < eps_greedy_coeff:
             action_idx = np.random.choice(self.trainer.action_set)
         else:
             model = self.trainer.model
             with torch.no_grad():
-                pr_rewards: torch.Tensor = model(
-                    batch_world_states_tensor=world_state_tensor.unsqueeze(0).to(model.device))
+                pr_rewards: torch.Tensor = model(prev_world_state_tensor.unsqueeze(0).to(model.device),
+                                                 next_worrld_state_tensor.unsqueeze(0).to(model.device))
                 pr_rewards = pr_rewards.squeeze(0).cpu()
             for action_idx in range(pr_rewards.shape[0]):
                 if action_idx not in self.trainer.action_set:
