@@ -6,7 +6,7 @@ model:
   dropout: 0.0
   reward_decay: 0.99
 
-  _critic_model_path: '../gym_output/dqn_10_22_2023__08_00_53/weights/lunar_lander_270.kpt'
+  critic_model_path: '../gym_output/best_lunar_lander.kpt'
   _critic_optimizer_path: '../gym_output/dqn_10_22_2023__08_00_53/weights/opt_lunar_lander_270.kpt'
 
 game:
@@ -22,7 +22,7 @@ replay_buffer:
 
 training:
   train_freq: 8
-  lr: 1e-4
+  lr: 5e-4
   
   batch_size: 128
   train_size: 0.9
@@ -30,13 +30,13 @@ training:
   n_grad_accum_steps: 1
   grad_norm: 1.0
   fp16: False
-  is_double: True
+  is_double: False
 
   n_local_steps: 1000
   model_update:
     n_steps: 5
     type: soft
-    rate: 0.1
+    rate: 1e-3
 
   output_folder: ../gym_output
   
@@ -50,4 +50,4 @@ training:
   eps_greedy:
     eps_from: 1.0
     eps_to: 0.05
-    n_epochs_of_decays: 1000000
+    n_epochs_of_decays: 300000
