@@ -32,7 +32,7 @@ class DqnTrainer:
                  replay_buffer: ReplayBuffer):
         self.cfg = cfg
         self.logger = logging.getLogger(__name__)
-        self.device = torch.device('cuda:0')
+        self.device = torch.device('cpu')
 
         self.action_set = [action_idx for action_idx in range(int(self.cfg['model']['out_size']))]
         self.replay_buffer = replay_buffer

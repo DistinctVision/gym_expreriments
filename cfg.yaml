@@ -1,16 +1,16 @@
 model:
-  in_size: 8
-  out_size: 4
+  in_size: 4
+  out_size: 2
 
   layers: [64, 32]
   dropout: 0.0
   reward_decay: 0.99
 
-  critic_model_path: '../gym_output/best_lunar_lander.kpt'
+  _critic_model_path: '../gym_output/best_lunar_lander.kpt'
   _critic_optimizer_path: '../gym_output/dqn_10_22_2023__08_00_53/weights/opt_lunar_lander_270.kpt'
 
 game:
-  name: LunarLander-v2
+  name: CartPole-v1
 
 replay_buffer:
   max_buffer_size: 50000
@@ -22,7 +22,7 @@ replay_buffer:
 
 training:
   train_freq: 8
-  lr: 5e-4
+  lr: 1e-3
   
   batch_size: 128
   train_size: 0.9
@@ -30,18 +30,18 @@ training:
   n_grad_accum_steps: 1
   grad_norm: 1.0
   fp16: False
-  is_double: False
+  is_double: True
 
   n_local_steps: 1000
   model_update:
-    n_steps: 5
+    n_steps: 1000
     type: soft
     rate: 1e-3
 
-  output_folder: ../gym_output
+  output_folder: ../gym_output/cartpole
   
   save:
-    model_name: lunar_lander
+    model_name: cart_pole
     save_every_n_step: 10
     n_last_steps: 50
     target_metric: reward
@@ -50,4 +50,4 @@ training:
   eps_greedy:
     eps_from: 1.0
     eps_to: 0.05
-    n_epochs_of_decays: 300000
+    n_epochs_of_decays: 3000000

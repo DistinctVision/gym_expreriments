@@ -21,9 +21,11 @@ trainer = DqnTrainer(cfg, replay_buffer)
 if game_name == 'CartPole-v1':
     std_world_state = torch.tensor([2.5, 2.5, 0.3, 0.3], dtype=torch.float32)
     mean_world_state = torch.tensor([0.0, 0.0,  0.0,  0.0], dtype=torch.float32)
+    n_envs = 1
 elif game_name == 'LunarLander-v2':
     std_world_state = torch.tensor([1.5, 1.5, 5., 5., 3.1415927, 5., 1., 1.], dtype=torch.float32)
     mean_world_state = torch.tensor([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], dtype=torch.float32)
+    n_envs = 6
 else:
     raise RuntimeError('Unknown game')
 
@@ -37,7 +39,7 @@ last_rewards = deque(maxlen=100)
 
 ep_counter = 0
 
-env = make_vec_env(game_name, n_envs=6, seed=np.random.randint(0, 2 ** 16 - 1))
+env = make_vec_env(game_name, n_envs=n_envs, seed=np.random.randint(0, 2 ** 16 - 1))
 env.reset()
 
 episode_data_recorders = [EpisodeDataRecorder(trainer) for _ in range(env.num_envs)]
