@@ -5,7 +5,7 @@ from collections import deque
 import numpy as np
 import torch
 
-from dqn.trainer import DqnTrainer, EpisodeDataRecorder
+from dqn_trainer import DqnTrainer, EpisodeDataRecorder
 from data import ReplayBuffer
 
 from stable_baselines3.common.env_util import make_vec_env
