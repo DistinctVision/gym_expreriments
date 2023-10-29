@@ -11,7 +11,7 @@ from data import ReplayBuffer
 from stable_baselines3.common.env_util import make_vec_env
 
 
-cfg = yaml.safe_load(open('cfg.yaml', 'r'))
+cfg = yaml.safe_load(open('dqn_cfg.yaml', 'r'))
 game_name = str(cfg['game']['name'])
 
 replay_buffer = ReplayBuffer()

@@ -19,8 +19,12 @@ def get_model_num_params(model: torch.nn.Module) -> str:
         if n_params > stage_n:
             stage_idx = idx
     
-    n_params /= stage_numbers[stage_idx]
-    return f'{n_params}{stage_postfixes[stage_idx]}'
+    if stage_idx > 0:
+        n_params /= stage_numbers[stage_idx]
+        n_params_str = f'{n_params:.2f}'
+    else:
+        n_params_str = str(n_params)
+    return f'{n_params_str}{stage_postfixes[stage_idx]}'
 
     
 class CriticModel(torch.nn.Module):
