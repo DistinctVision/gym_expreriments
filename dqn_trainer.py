@@ -135,7 +135,7 @@ class DqnTrainer:
                     item.data.copy_(state_dict[item_key].data)
     
     
-    def _get_eps_greedy_coeff(self) -> float:
+    def _get_eps_greedy_coef(self) -> float:
         training_cfg = self.cfg['training']
         eps_greedy_cfg = dict(training_cfg['eps_greedy'])
         eps_from = float(eps_greedy_cfg['eps_from'])
@@ -211,7 +211,7 @@ class DqnTrainer:
                 self._training_data.grad_accum_counter += 1
         self._training_data.batch_value_list.add(loss_value, 'loss')
         
-        eps_greedy = self._get_eps_greedy_coeff()
+        eps_greedy = self._get_eps_greedy_coef()
         self._training_data.batch_value_list.add(eps_greedy, 'eps_greedy')
         
         self._training_data.progress_bar.update(1)
@@ -275,7 +275,7 @@ class EpisodeDataRecorder:
     
     def _get_action_idx(self, prev_world_state_tensor: torch.Tensor,
                         next_worrld_state_tensor: torch.Tensor) -> int:
-        eps_greedy_coeff = self.trainer._get_eps_greedy_coeff()
+        eps_greedy_coeff = self.trainer._get_eps_greedy_coef()
         if np.random.uniform(0, 1) < eps_greedy_coeff:
             action_idx = np.random.choice(self.trainer.action_set)
         else:

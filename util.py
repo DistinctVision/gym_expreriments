@@ -221,7 +221,7 @@ class LogWriter:
             return
         model_name = str(self.save_cfg.get('model_name', 'model'))
         cfg_target_metric = self.save_cfg.get('target_metric', None)
-        if self.last_values is not None and cfg_target_metric is  not None:
+        if self.last_values is not None and cfg_target_metric is not None:
             target_op = {
                 '<': operator.le,
                 '>': operator.ge,

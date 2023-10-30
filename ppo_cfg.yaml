@@ -1,16 +1,19 @@
 model:
-  in_size: 4
-  out_size: 2
+  in_size: 8
+  out_size: 4
 
   policy_net_layers: [64, 32]
   value_net_layers: [64, 32]
   dropout: 0.0
+
+  models_path: '..\gym_output\lunar_lander\ppo_10_30_2023__12_36_42\weights\lunar_lander_2240.kpt'
+  optimizer_path: '..\gym_output\lunar_lander\ppo_10_30_2023__12_36_42\weights\opt_lunar_lander_2240.kpt'
   
 game:
-  name: CartPole-v1
+  name: LunarLander-v2
 
 rollout:
-  observation_size: 4
+  observation_size: 8
   max_buffer_size: 2048
   calc_batch_size: 512
   discount_factor: 0.99
@@ -29,11 +32,11 @@ training:
     entropy_coef: 0.0
     value_function_coef: 0.5 
 
-  output_folder: ../gym_output/cart_pole
+  output_folder: ../gym_output/lunar_lander
   
   save:
-    model_name: cart_pole
+    model_name: lunar_lander
     save_every_n_step: 5
     n_last_steps: 10
-    target_metric: reward
+    target_metric: mean_reward
     target_op: '>'

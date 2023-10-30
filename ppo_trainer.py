@@ -56,6 +56,17 @@ class PpoTrainer:
 
         self._init_log()
         self._init_models()
+    
+    def get_eps_greedy_coef(self) -> float:
+        training_cfg = self.cfg['training']
+        eps_greedy_cfg = dict(training_cfg['eps_greedy'])
+        eps_from = float(eps_greedy_cfg['eps_from'])
+        eps_to = float(eps_greedy_cfg['eps_to'])
+        n_epochs_of_decays = int(eps_greedy_cfg['n_epochs_of_decays'])
+        global_step = (self.log_writer.step - 1)
+        step_coeff = min(max(global_step / n_epochs_of_decays, 0.0), 1.0)
+        eps_greedy_coeff = eps_from * math.exp(math.log(eps_to / eps_from) * step_coeff)
+        return eps_greedy_coeff
         
     def set_ext_values(self, **kwargs):
         self._ext_values = {value_name: value for value_name, value in kwargs.items()}
@@ -193,6 +204,5 @@ class PpoTrainer:
                 self.logger.info(f'  {metric_name}: {metric_value}')
         self.logger.info(' ')
         self.log_writer.save_plots()
-        self.log_writer.save_weights(self.models, self.optimizer)
         self.log_writer.update_step()
                 

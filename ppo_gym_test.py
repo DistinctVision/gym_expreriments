@@ -1,13 +1,14 @@
 import yaml
-from model import CriticModel
 
 import numpy as np
 import torch
 
 import gymnasium as gym
 
+from actor_critic_policy import ActorCriticPolicy
 
-cfg = yaml.safe_load(open('cfg.yaml', 'r'))
+
+cfg = yaml.safe_load(open('ppo_cfg.yaml', 'r'))
 game_name = str(cfg['game']['name'])
 
 
@@ -28,9 +29,14 @@ def preprocess(world_state: np.ndarray) -> torch.Tensor:
 
 env = gym.make(game_name, render_mode="human")
 
-model = CriticModel.build_model(cfg['model'])
-ckpt = torch.load(cfg['model']['critic_model_path'], map_location='cpu')
-model.load_state_dict(ckpt)
+device = 'cpu'
+
+models = ActorCriticPolicy.build(cfg['model'])
+ckpt = torch.load(cfg['model']['models_path'], map_location='cpu')
+models.load_state_dict(ckpt)
+models = models.to(device)
+
+policy_net = models.policy_net
 
 while True:
     cur_world_state_tensor, info = env.reset()
@@ -41,10 +47,11 @@ while True:
     
     for _ in range(500):
         with torch.no_grad():
-            pr_rewards: torch.Tensor = model(prev_world_state_tensor.unsqueeze(0).to(model.device),
-                                             cur_world_state_tensor.unsqueeze(0).to(model.device))
-            pr_rewards = pr_rewards.squeeze(0).cpu()
-        action = int(pr_rewards.argmax(0))
+            logits: torch.Tensor = policy_net(cur_world_state_tensor.unsqueeze(0).to(device))
+            logits.squeeze_(0)
+            probabilities = torch.nn.functional.softmax(logits)
+            action_dist = torch.distributions.Categorical(probabilities)
+            action = int(action_dist.sample())
         prev_world_state_tensor = cur_world_state_tensor
         cur_world_state_tensor, reward, terminated, truncated, info = env.step(action)
         cur_world_state_tensor = preprocess(cur_world_state_tensor)

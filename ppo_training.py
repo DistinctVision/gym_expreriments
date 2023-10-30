@@ -1,6 +1,6 @@
 import typing as tp
 
-import random
+import math
 from collections import deque
 import yaml
 
@@ -37,6 +37,10 @@ elif game_name == 'LunarLander-v2':
 else:
     raise RuntimeError('Unknown game')
 
+target_data_size = rollout_max_buffer_size
+rollout_max_buffer_size = math.ceil(rollout_max_buffer_size / n_envs)
+rollout_cfg['max_buffer_size'] = rollout_max_buffer_size + 1
+
 
 def preprocess(world_state: np.ndarray) -> torch.Tensor:
     world_state = torch.from_numpy(world_state)
@@ -66,7 +70,7 @@ while True:
     steps = 0
     ep_rewards = np.zeros((env.num_envs,), dtype=np.float32)
     
-    while not dones.all():
+    while not all(dones):
         action_dists = [actor_critic_policy.get_action_dist(cur_world_state_tensor)
                         for cur_world_state_tensor in cur_world_state_tensors]
         actions = [int(action_dict.sample()) for action_dict in action_dists]
@@ -75,13 +79,21 @@ while True:
         next_world_state_tensors = [preprocess(world_state_tensor) for world_state_tensor in next_world_state_tensors]
         next_dones = np.logical_or(dones, next_dones)
 
-        for cur_rollout_buffer, world_state_tensor, action, action_dist, reward, done, next_done in \
-                zip(cur_rollout_buffers, cur_world_state_tensors, actions, action_dists, rewards, dones, next_dones):
+        for cur_rollout_buffer, world_state_tensor, action, action_dist, reward, done in \
+                zip(cur_rollout_buffers, cur_world_state_tensors, actions, action_dists, rewards, dones):
             if done:
                 continue
             cur_rollout_buffer.add(world_state_tensor, action,
                                    float(action_dist.log_prob(torch.tensor(action))),
                                    float(reward))
+            
+        if steps >= rollout_max_buffer_size:
+            next_dones_ = []
+            for next_done, state in zip(next_dones, states):
+                if not next_done:
+                    state['TimeLimit.truncated'] = True
+                next_dones_.append(True)
+            next_dones = next_dones_
         
         for cur_rollout_buffer, next_world_state_tensor, next_done, state in \
                 zip(cur_rollout_buffers, next_world_state_tensors, next_dones, states):
@@ -110,6 +122,7 @@ while True:
     print(f'Episode: {ep_counter} | Rollout buffer size: {data_size} | Mean rewards: {last_mean_reward:.2f} |'\
           f'Episode Rewards: {ep_rewards_str}')
         
-    if data_size >= rollout_max_buffer_size:
-        dataset, rollout_buffers = RolloutDataset.collect_data(rollout_max_buffer_size, batch_size, rollout_buffers)
+    while data_size >= target_data_size:
+        dataset, rollout_buffers = RolloutDataset.collect_data(target_data_size, batch_size, rollout_buffers)
         trainer.train(dataset)
+        data_size = sum([len(rollout_buffer) for rollout_buffer in rollout_buffers])
