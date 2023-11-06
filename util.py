@@ -294,12 +294,17 @@ class LogWriter:
         if ext_name is None:
             ext_name = ''
         
-        opt_ckpt_path = self.output_weights_folder / f'opt_{model_name}_{self.step}{ext_name}.kpt'
+        opt_ckpt_path = self.output_weights_folder / f'opt_{model_name}_{self.step}.kpt'
         torch.save(optimizator.state_dict(), opt_ckpt_path)
-        self.last_optimizer_paths.append(opt_ckpt_path)
+        assert opt_ckpt_path.exists()
+        
+        if len(self.last_optimizer_paths) > 0 and equals_paths(opt_ckpt_path, self.last_optimizer_paths[-1]):
+            logging.warning(f'It looks like you are saving the optimizer several times!')
+        else:
+            self.last_optimizer_paths.append(opt_ckpt_path)
         
         if len(self.last_optimizer_paths) > n_last_steps:
-            del_paths = self.last_optimizer_paths[:len(self.last_optimizer_paths) - n_last_steps]
+            del_paths = self.last_optimizer_paths[:-n_last_steps]
             for opt_ckpt_path in del_paths:
                 os.remove(opt_ckpt_path)
             self.last_optimizer_paths = self.last_optimizer_paths[-n_last_steps:]

@@ -1,0 +1,8 @@
+numpy
+PyYAML
+torch
+box2d-py
+kaleido
+plotly
+gymnasium
+imageio[ffmpeg]
