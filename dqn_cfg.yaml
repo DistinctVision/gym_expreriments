@@ -1,53 +1,49 @@
 model:
-  in_size: 8
-  out_size: 4
+  in_size: 4
+  out_size: 2
 
-  layers: [64, 32]
+  layers: [120, 84]
   dropout: 0.0
   reward_decay: 0.99
 
-  critic_model_path: '../gym_output/best_lunar_lander.kpt'
-  _critic_optimizer_path: '../gym_output/dqn_10_22_2023__08_00_53/weights/opt_lunar_lander_270.kpt'
+  critic_model_path: '..\gym_output\dqn_cart_pole\dqn_11_12_2023__19_57_46\weights\cart_pole_170.kpt'
+  _critic_optimizer_path: '..\gym_output\dqn_cart_pole\dqn_11_12_2023__19_57_46\weights\opt_cart_pole_170.kpt'
 
 game:
-  name: LunarLander-v2
+  name: CartPole-v1
+  _name: LunarLander-v2
 
 replay_buffer:
-  max_buffer_size: 50000
-  path: ../nexto_rp_0_wr.pth
-  _data_dir: ../gym_output/dqn_10_19_2023__15_29_00/weights
-  _cached_rnn_dir: /media/alex/SSD/rnn_cache
-  _cached_rnn_path: /media/alex/SSD/rnn_cache.pth
-
+  max_buffer_size: 10000
 
 training:
-  train_freq: 8
-  lr: 5e-4
+  train_freq: 10
+  lr: 5e-5
   
   batch_size: 128
   train_size: 0.9
   val_size: 0.1
   n_grad_accum_steps: 1
-  grad_norm: 1.0
+  _grad_norm: 1.0
   fp16: False
-  is_double: True
+  is_double: False
 
   n_local_steps: 1000
   model_update:
-    n_steps: 5
-    type: soft
+    n_steps: 1000
+    type: hard
     rate: 1e-1
 
-  output_folder: ../gym_output/lunar_lander
+  output_folder: ../gym_output/dqn_cart_pole
   
   save:
-    model_name: lunar_lander
-    save_every_n_step: 10
+    model_name: cart_pole
+    save_every_n_step: 1
     n_last_steps: 50
     target_metric: reward
     target_op: '>'
     
   eps_greedy:
-    eps_from: 1.0
+    eps_from: 0.1
     eps_to: 0.05
-    n_epochs_of_decays: 300000
+    n_epochs_of_decays: 100000

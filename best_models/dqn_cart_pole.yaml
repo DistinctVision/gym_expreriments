@@ -1,0 +1,32 @@
+game:
+  name: CartPole-v1
+model:
+  critic_model_path: ..\gym_output\dqn_cart_pole\dqn_11_12_2023__19_57_46\weights\cart_pole_170.kpt
+  dropout: 0.0
+  in_size: 4
+  layers:
+  - 120
+  - 84
+  out_size: 2
+  reward_decay: 0.99
+replay_buffer:
+  max_buffer_size: 10000
+training:
+  _grad_norm: 1.0
+  batch_size: 128
+  eps_greedy:
+    eps_from: 0.1
+    eps_to: 0.05
+    n_epochs_of_decays: 100000
+  fp16: false
+  is_double: false
+  lr: 5e-5
+  model_update:
+    n_steps: 1000
+    rate: 1e-1
+    type: hard
+  n_grad_accum_steps: 1
+  n_local_steps: 1000
+  train_freq: 10
+  train_size: 0.9
+  val_size: 0.1

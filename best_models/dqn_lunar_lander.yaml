@@ -1,0 +1,39 @@
+game:
+  name: LunarLander-v2
+model:
+  critic_model_path: best_models\dqn_lunar_lander.kpt
+  dropout: 0.0
+  in_size: 8
+  layers:
+  - 64
+  - 32
+  out_size: 4
+  reward_decay: 0.99
+replay_buffer:
+  max_buffer_size: 50000
+training:
+  batch_size: 128
+  eps_greedy:
+    eps_from: 1.0
+    eps_to: 0.05
+    n_epochs_of_decays: 300000
+  fp16: false
+  grad_norm: 1.0
+  is_double: false
+  lr: 5e-4
+  model_update:
+    n_steps: 5
+    rate: 1e-3
+    type: soft
+  n_grad_accum_steps: 1
+  n_local_steps: 1000
+  output_folder: ../gym_output
+  save:
+    model_name: lunar_lander
+    n_last_steps: 50
+    save_every_n_step: 10
+    target_metric: reward
+    target_op: '>'
+  train_freq: 8
+  train_size: 0.9
+  val_size: 0.1

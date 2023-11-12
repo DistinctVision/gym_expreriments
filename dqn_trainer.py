@@ -78,12 +78,12 @@ class DqnTrainer:
         print(f'A size of the model: {get_model_num_params(self.model)}')
         
         non_frozen_critic_parameters = [param for param in self.target_model.parameters() if param.requires_grad]
-        # self.optimizer = torch.optim.Adam(non_frozen_critic_parameters,
-        #                                   lr=float(training_cfg['lr']),
-        #                                   betas=(0.9, 0.999), eps=1e-8)
-        self.optimizer = torch.optim.RMSprop(non_frozen_critic_parameters,
-                                             lr=float(training_cfg['lr']),
-                                             alpha=0.99, eps=1e-8)
+        self.optimizer = torch.optim.Adam(non_frozen_critic_parameters,
+                                          lr=float(training_cfg['lr']),
+                                          betas=(0.9, 0.999), eps=1e-8)
+        # self.optimizer = torch.optim.RMSprop(non_frozen_critic_parameters,
+        #                                      lr=float(training_cfg['lr']),
+        #                                      alpha=0.99, eps=1e-8)
         optimizer_path = model_cfg.get('critic_optimizer_path', None)
         if optimizer_path is not None:
             optimizer_path = Path(optimizer_path)
@@ -168,7 +168,8 @@ class DqnTrainer:
         batch_indices = self.replay_buffer.sample_batch_indices(batch_size)
         cur_seq_batch, next_seq_batch, mask_done = self.replay_buffer.get_seq_batch(batch_indices, 2)
         sync_grad = (self._training_data.grad_accum_counter + 1) >= n_grad_accum_steps
-                
+        
+        self.target_model.train()
         with precision_ctx:
             next_world_states_tensor = next_seq_batch.world_states.to(self.device)
             with torch.no_grad():
@@ -192,7 +193,7 @@ class DqnTrainer:
                 action_indices = cur_seq_batch.action_indices[:, -1].unsqueeze(1).long().to(self.device)
                 pr_rewards = pr_rewards.gather(dim=1, index=action_indices).squeeze(1)
                 
-                loss = torch.nn.functional.smooth_l1_loss(pr_rewards, rewards)
+                loss = torch.nn.functional.mse_loss(pr_rewards, rewards)
                 
                 loss /= n_grad_accum_steps
                 grad_scaler.scale(loss).backward()
@@ -279,7 +280,8 @@ class EpisodeDataRecorder:
         if np.random.uniform(0, 1) < eps_greedy_coeff:
             action_idx = np.random.choice(self.trainer.action_set)
         else:
-            model = self.trainer.model
+            model = self.trainer.target_model
+            model.eval()
             with torch.no_grad():
                 pr_rewards: torch.Tensor = model(prev_world_state_tensor.unsqueeze(0).to(model.device),
                                                  next_worrld_state_tensor.unsqueeze(0).to(model.device))
