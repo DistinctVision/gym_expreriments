@@ -1,6 +1,6 @@
 import typing as tp
-import yaml
 from collections import deque
+import yaml
 
 import numpy as np
 import torch
@@ -11,8 +11,8 @@ import gymnasium as gym
 from model import CriticModel
 
 
-cfg = yaml.safe_load(open('best_models\dqn_lunar_lander.yaml', 'r'))
 # cfg = yaml.safe_load(open('best_models\dqn_cart_pole.yaml', 'r'))
+cfg = yaml.safe_load(open('best_models\dqn_lunar_lander.yaml', 'r'))
 game_name = str(cfg['game']['name'])
 
 

@@ -1,7 +1,7 @@
 game:
   name: CartPole-v1
 model:
-  critic_model_path: ..\gym_output\dqn_cart_pole\dqn_11_12_2023__19_57_46\weights\cart_pole_170.kpt
+  critic_model_path: best_models\dqn_cart_pole.kpt
   dropout: 0.0
   in_size: 4
   layers:
